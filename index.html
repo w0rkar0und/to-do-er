@@ -872,13 +872,6 @@
                 font-size: 0.85em;
             }
 
-            .copy-mode-indicator {
-                padding: 16px 24px;
-                font-size: 14px;
-                max-width: 280px;
-                text-align: center;
-            }
-
             .debug-info {
                 top: 10px;
                 right: 10px;
@@ -955,9 +948,6 @@
 </head>
 <body>
     <div class="debug-info" id="debugInfo"></div>
-    <div class="copy-mode-indicator" id="copyModeIndicator">
-        Click on a day to copy the task there
-    </div>
     
     <div class="container">
         <div class="header">
@@ -1835,9 +1825,6 @@
                 
                 // Exit copy mode
                 this.exitCopyMode();
-                
-                // Provide user feedback
-                this.showCopySuccess(targetDay);
             }
 
             exitCopyMode() {
@@ -1869,21 +1856,6 @@
                 
                 this.copyMode = null;
                 this.log(`Copy mode exited`);
-            }
-
-            showCopySuccess(targetDay) {
-                const indicator = document.getElementById('copyModeIndicator');
-                if (indicator) {
-                    indicator.textContent = `✓ Task copied to ${this.dayNames[targetDay]}`;
-                    indicator.style.display = 'block';
-                    indicator.style.backgroundColor = '#27ae60';
-                    
-                    setTimeout(() => {
-                        indicator.style.display = 'none';
-                        indicator.style.backgroundColor = 'rgba(0,0,0,0.8)';
-                        indicator.textContent = 'Click on a day to copy the task there';
-                    }, 2000);
-                }
             }
 
             escapeHtml(text) {
