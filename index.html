@@ -7,6 +7,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
+    
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <style>
         * {
             margin: 0;
@@ -879,6 +883,25 @@
                 max-width: none;
                 font-size: 10px;
             }
+
+            .auth-form {
+                padding: 32px 24px;
+            }
+
+            .auth-form h1 {
+                font-size: 2em;
+            }
+
+            .auth-form input,
+            .auth-form button {
+                font-size: 16px; /* Prevent zoom on iOS */
+            }
+
+            .user-menu {
+                position: static;
+                margin-bottom: 16px;
+                justify-content: space-between;
+            }
         }
 
         @media (max-width: 320px) {
@@ -949,6 +972,28 @@
 <body>
     <div class="debug-info" id="debugInfo"></div>
     
+    <!-- Firebase Authentication Overlay -->
+    <div class="auth-overlay" id="authOverlay">
+        <div class="auth-form">
+            <h1>To-Do-Er</h1>
+            <p>Secure weekly task management</p>
+            
+            <div class="auth-tabs">
+                <button class="auth-tab active" onclick="showAuthForm('signin')">Sign In</button>
+                <button class="auth-tab" onclick="showAuthForm('signup')">Sign Up</button>
+            </div>
+            
+            <form id="authForm" onsubmit="handleAuth(event)">
+                <input type="email" id="authEmail" placeholder="Email address" required>
+                <input type="password" id="authPassword" placeholder="Password" required>
+                <button type="submit" id="authSubmit">Sign In</button>
+            </form>
+            
+            <div class="auth-error" id="authError"></div>
+            <div class="auth-loading" id="authLoading">Authenticating...</div>
+        </div>
+    </div>
+    
     <div class="container">
         <div class="header">
             <div class="week-nav">
@@ -959,6 +1004,7 @@
                 </div>
                 <button id="nextWeek">Next Week &rarr;</button>
             </div>
+            <!-- User menu will be inserted here by JavaScript -->
         </div>
 
         <div class="days-grid" id="daysGrid">
@@ -1865,10 +1911,1073 @@
             }
         }
 
-        // Initialize app when DOM is loaded
-        document.addEventListener('DOMContentLoaded', () => {
-            window.app = new TodoApp();
+    <script>
+        // Firebase Configuration - Your Project
+        const firebaseConfig = {
+            apiKey: "AIzaSyAMihkoayQr4VBBYLUZOwHEJ__E6Wt2v3Q",
+            authDomain: "to-do-er-ad56b.firebaseapp.com",
+            projectId: "to-do-er-ad56b",
+            storageBucket: "to-do-er-ad56b.firebasestorage.app",
+            messagingSenderId: "259942634060",
+            appId: "1:259942634060:web:8f0bc5b97694d28eec1ae9"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+
+        // Auth state variables
+        let currentAuthMode = 'signin';
+        let currentUser = null;
+
+        // Authentication Functions
+        function showAuthForm(mode) {
+            currentAuthMode = mode;
+            const tabs = document.querySelectorAll('.auth-tab');
+            const submitBtn = document.getElementById('authSubmit');
+            
+            tabs.forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            if (mode === 'signup') {
+                submitBtn.textContent = 'Sign Up';
+            } else {
+                submitBtn.textContent = 'Sign In';
+            }
+            
+            // Clear form
+            document.getElementById('authForm').reset();
+            document.getElementById('authError').textContent = '';
+        }
+
+        function handleAuth(event) {
+            event.preventDefault();
+            
+            const email = document.getElementById('authEmail').value;
+            const password = document.getElementById('authPassword').value;
+            const errorDiv = document.getElementById('authError');
+            const loadingDiv = document.getElementById('authLoading');
+            const submitBtn = document.getElementById('authSubmit');
+            
+            // Show loading state
+            loadingDiv.classList.add('show');
+            submitBtn.disabled = true;
+            errorDiv.textContent = '';
+            
+            const authPromise = currentAuthMode === 'signup' 
+                ? auth.createUserWithEmailAndPassword(email, password)
+                : auth.signInWithEmailAndPassword(email, password);
+            
+            authPromise
+                .then((userCredential) => {
+                    console.log('Auth successful:', userCredential.user.email);
+                    // Auth state listener will handle the UI update
+                })
+                .catch((error) => {
+                    let errorMessage = 'Authentication failed. Please try again.';
+                    
+                    switch (error.code) {
+                        case 'auth/user-not-found':
+                        case 'auth/wrong-password':
+                            errorMessage = 'Invalid email or password.';
+                            break;
+                        case 'auth/email-already-in-use':
+                            errorMessage = 'An account with this email already exists.';
+                            break;
+                        case 'auth/weak-password':
+                            errorMessage = 'Password should be at least 6 characters.';
+                            break;
+                        case 'auth/invalid-email':
+                            errorMessage = 'Please enter a valid email address.';
+                            break;
+                        case 'auth/too-many-requests':
+                            errorMessage = 'Too many attempts. Please try again later.';
+                            break;
+                    }
+                    
+                    errorDiv.textContent = errorMessage;
+                    console.error('Auth error:', error);
+                })
+                .finally(() => {
+                    loadingDiv.classList.remove('show');
+                    submitBtn.disabled = false;
+                });
+        }
+
+        function signOut() {
+            auth.signOut().then(() => {
+                console.log('User signed out');
+            }).catch((error) => {
+                console.error('Sign out error:', error);
+            });
+        }
+
+        // Auth State Listener
+        auth.onAuthStateChanged((user) => {
+            const authOverlay = document.getElementById('authOverlay');
+            const container = document.querySelector('.container');
+            
+            if (user) {
+                // User is signed in
+                currentUser = user;
+                console.log('User signed in:', user.email);
+                
+                // Hide auth overlay
+                authOverlay.classList.add('hidden');
+                
+                // Add user menu to header
+                addUserMenu(user);
+                
+                // Initialize the todo app
+                if (!window.app) {
+                    window.app = new TodoApp();
+                }
+            } else {
+                // User is signed out
+                currentUser = null;
+                console.log('User signed out');
+                
+                // Show auth overlay
+                authOverlay.classList.remove('hidden');
+                
+                // Remove user menu
+                const userMenu = document.querySelector('.user-menu');
+                if (userMenu) {
+                    userMenu.remove();
+                }
+                
+                // Reset app
+                if (window.app) {
+                    // Could add cleanup here if needed
+                }
+            }
         });
+
+        function addUserMenu(user) {
+            // Remove existing user menu
+            const existingMenu = document.querySelector('.user-menu');
+            if (existingMenu) {
+                existingMenu.remove();
+            }
+            
+            const header = document.querySelector('.header');
+            const userMenu = document.createElement('div');
+            userMenu.className = 'user-menu';
+            userMenu.innerHTML = `
+                <div class="user-info">${user.email}</div>
+                <button class="sign-out-btn" onclick="signOut()">Sign Out</button>
+            `;
+            header.appendChild(userMenu);
+        }
+
+        class TodoApp {
+            constructor() {
+                this.currentWeek = null;
+                this.currentYear = null;
+                this.tasks = {};
+                this.collapsedSections = {};
+                this.debugMode = false;
+                this.copyMode = null;
+                this.days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'weekend'];
+                this.dayNames = {
+                    monday: 'Monday',
+                    tuesday: 'Tuesday', 
+                    wednesday: 'Wednesday',
+                    thursday: 'Thursday',
+                    friday: 'Friday',
+                    weekend: 'Weekend'
+                };
+                
+                this.init();
+                this.bindEvents();
+                this.loadCurrentWeek();
+                this.renderDays();
+                this.renderAllTasks();
+                this.attachTaskEventListeners();
+                this.applyCollapsedStates();
+                
+                this.log('TodoApp with Firebase Auth initialized successfully');
+            }
+
+            log(message, data = null) {
+                console.log(`[TodoApp] ${message}`, data || '');
+                if (this.debugMode) {
+                    const debugEl = document.getElementById('debugInfo');
+                    debugEl.style.display = 'block';
+                    const time = new Date().toLocaleTimeString();
+                    debugEl.innerHTML += `${time}: ${message}<br>`;
+                    debugEl.scrollTop = debugEl.scrollHeight;
+                }
+            }
+
+            init() {
+                // Load tasks from localStorage (user-specific)
+                const userKey = currentUser ? currentUser.uid : 'anonymous';
+                try {
+                    const saved = localStorage.getItem(`todoer-tasks-daily-${userKey}`);
+                    if (saved) {
+                        this.tasks = JSON.parse(saved);
+                        this.log('Daily tasks loaded from localStorage', this.tasks);
+                    } else {
+                        // Check for old format and migrate
+                        const oldSaved = localStorage.getItem('todoer-tasks');
+                        if (oldSaved) {
+                            this.migrateLegacyData(JSON.parse(oldSaved));
+                            this.log('Migrated legacy task data to daily format');
+                        }
+                    }
+                } catch (e) {
+                    this.log('Error loading tasks from localStorage', e);
+                    this.tasks = {};
+                }
+
+                // Load collapsed sections state
+                try {
+                    const savedCollapsed = localStorage.getItem(`todoer-collapsed-sections-${userKey}`);
+                    if (savedCollapsed) {
+                        this.collapsedSections = JSON.parse(savedCollapsed);
+                        this.log('Collapsed sections loaded from localStorage', this.collapsedSections);
+                    }
+                } catch (e) {
+                    this.log('Error loading collapsed sections', e);
+                    this.collapsedSections = {};
+                }
+
+                // Enable debug mode with Ctrl+Shift+D
+                document.addEventListener('keydown', (e) => {
+                    if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+                        this.debugMode = !this.debugMode;
+                        document.getElementById('debugInfo').style.display = 
+                            this.debugMode ? 'block' : 'none';
+                        this.log(`Debug mode ${this.debugMode ? 'enabled' : 'disabled'}`);
+                    }
+                });
+            }
+
+            migrateLegacyData(oldTasks) {
+                // Convert old format {weekKey: [tasks]} to new format {weekKey: {day: [tasks]}}
+                for (const [weekKey, tasks] of Object.entries(oldTasks)) {
+                    if (Array.isArray(tasks)) {
+                        // Distribute old tasks to Monday by default
+                        this.tasks[weekKey] = {
+                            monday: tasks,
+                            tuesday: [],
+                            wednesday: [],
+                            thursday: [],
+                            friday: [],
+                            weekend: []
+                        };
+                    }
+                }
+                this.saveTasks();
+            }
+
+            bindEvents() {
+                document.getElementById('prevWeek').addEventListener('click', () => this.navigateWeek(-1));
+                document.getElementById('nextWeek').addEventListener('click', () => this.navigateWeek(1));
+            }
+
+            getWeekNumber(date) {
+                // ISO week calculation (Monday start)
+                const d = new Date(date);
+                d.setHours(0, 0, 0, 0);
+                d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+                const week1 = new Date(d.getFullYear(), 0, 4);
+                const weekNum = 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+                return { week: weekNum, year: d.getFullYear() };
+            }
+
+            getWeekDates(year, week) {
+                const jan4 = new Date(year, 0, 4);
+                const startOfWeek = new Date(jan4.getTime() + (week - 1) * 7 * 24 * 60 * 60 * 1000);
+                startOfWeek.setDate(startOfWeek.getDate() - ((jan4.getDay() + 6) % 7));
+                
+                const dates = {};
+                const dayNames = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+                
+                dayNames.forEach((day, index) => {
+                    const date = new Date(startOfWeek);
+                    date.setDate(date.getDate() + index);
+                    dates[day] = date;
+                });
+                
+                // Weekend combines Saturday and Sunday
+                const saturday = new Date(startOfWeek);
+                saturday.setDate(saturday.getDate() + 5);
+                const sunday = new Date(startOfWeek);
+                sunday.setDate(sunday.getDate() + 6);
+                dates.weekend = { start: saturday, end: sunday };
+                
+                return dates;
+            }
+
+            loadCurrentWeek() {
+                const now = new Date();
+                const weekInfo = this.getWeekNumber(now);
+                this.currentWeek = weekInfo.week;
+                this.currentYear = weekInfo.year;
+                this.updateWeekDisplay();
+                this.log(`Current week loaded: Week ${this.currentWeek}, ${this.currentYear}`);
+            }
+
+            navigateWeek(direction) {
+                // Exit copy mode when navigating weeks
+                if (this.copyMode) {
+                    this.exitCopyMode();
+                }
+                
+                this.currentWeek += direction;
+                
+                // Handle year transitions
+                if (this.currentWeek < 1) {
+                    this.currentYear--;
+                    this.currentWeek = 52; // Approximate, ISO weeks can vary
+                } else if (this.currentWeek > 52) {
+                    this.currentYear++;
+                    this.currentWeek = 1;
+                }
+                
+                this.updateWeekDisplay();
+                this.renderDays();
+                this.renderAllTasks();
+                this.attachTaskEventListeners(); // Ensure event listeners are attached
+                this.applyCollapsedStates();
+                this.log(`Navigated to Week ${this.currentWeek}, ${this.currentYear}`);
+            }
+
+            updateWeekDisplay() {
+                const dates = this.getWeekDates(this.currentYear, this.currentWeek);
+                const title = `Week ${this.currentWeek}, ${this.currentYear}`;
+                const dateRange = `${dates.monday.toLocaleDateString('en-GB', { 
+                    month: 'short', day: 'numeric' 
+                })} - ${dates.weekend.end.toLocaleDateString('en-GB', { 
+                    month: 'short', day: 'numeric' 
+                })}, ${this.currentYear}`;
+                
+                document.getElementById('weekTitle').textContent = title;
+                document.getElementById('weekDates').textContent = dateRange;
+            }
+
+            getWeekKey() {
+                return `${this.currentYear}-W${String(this.currentWeek).padStart(2, '0')}`;
+            }
+
+            getCollapsedKey(day) {
+                return `${this.getWeekKey()}-${day}`;
+            }
+
+            isDayCollapsed(day) {
+                const key = this.getCollapsedKey(day);
+                const tasks = this.getTasksForDay(day);
+                
+                // If manually collapsed, respect that
+                if (this.collapsedSections[key] !== undefined) {
+                    return this.collapsedSections[key];
+                }
+                
+                // Auto-collapse empty sections
+                return tasks.length === 0;
+            }
+
+            toggleDayCollapse(day) {
+                const key = this.getCollapsedKey(day);
+                const currentlyCollapsed = this.isDayCollapsed(day);
+                
+                this.collapsedSections[key] = !currentlyCollapsed;
+                this.saveCollapsedState();
+                this.applyCollapsedState(day);
+                
+                this.log(`Day ${day} ${currentlyCollapsed ? 'expanded' : 'collapsed'}`);
+            }
+
+            expandDay(day) {
+                const key = this.getCollapsedKey(day);
+                if (this.isDayCollapsed(day)) {
+                    this.collapsedSections[key] = false;
+                    this.saveCollapsedState();
+                    this.applyCollapsedState(day, true); // true for animation
+                    this.log(`Day ${day} auto-expanded`);
+                }
+            }
+
+            applyCollapsedStates() {
+                this.days.forEach(day => {
+                    this.applyCollapsedState(day);
+                });
+            }
+
+            applyCollapsedState(day, animate = false) {
+                const dayColumn = document.querySelector(`.day-${day}`);
+                const toggle = document.querySelector(`.day-${day} .collapse-toggle`);
+                
+                if (!dayColumn || !toggle) return;
+                
+                const collapsed = this.isDayCollapsed(day);
+                
+                if (animate && !collapsed) {
+                    dayColumn.classList.add('expanding');
+                    setTimeout(() => dayColumn.classList.remove('expanding'), 300);
+                }
+                
+                dayColumn.classList.toggle('collapsed', collapsed);
+                dayColumn.classList.toggle('expanded', !collapsed);
+                toggle.classList.toggle('collapsed', collapsed);
+                toggle.innerHTML = collapsed ? '▶' : '▼';
+                toggle.title = collapsed ? 'Expand section' : 'Collapse section';
+            }
+
+            saveCollapsedState() {
+                const userKey = currentUser ? currentUser.uid : 'anonymous';
+                try {
+                    localStorage.setItem(`todoer-collapsed-sections-${userKey}`, JSON.stringify(this.collapsedSections));
+                    this.log('Collapsed sections saved to localStorage');
+                } catch (e) {
+                    this.log('Error saving collapsed sections', e);
+                }
+            }
+
+            renderDays() {
+                const grid = document.getElementById('daysGrid');
+                const dates = this.getWeekDates(this.currentYear, this.currentWeek);
+                
+                grid.innerHTML = this.days.map(day => {
+                    const dayTasks = this.getTasksForDay(day);
+                    let dateDisplay;
+                    
+                    if (day === 'weekend') {
+                        dateDisplay = `${dates[day].start.toLocaleDateString('en-GB', { 
+                            day: 'numeric', month: 'short' 
+                        })} - ${dates[day].end.toLocaleDateString('en-GB', { 
+                            day: 'numeric', month: 'short' 
+                        })}`;
+                    } else {
+                        dateDisplay = dates[day].toLocaleDateString('en-GB', { 
+                            day: 'numeric', month: 'short' 
+                        });
+                    }
+                    
+                    return `
+                        <div class="day-column day-${day} expanded" data-day="${day}">
+                            <div class="day-header" onclick="app.toggleDayCollapse('${day}')">
+                                <div class="day-header-info">
+                                    <div>
+                                        <div class="day-title">${this.dayNames[day]}</div>
+                                        <div class="day-date">${dateDisplay}</div>
+                                    </div>
+                                </div>
+                                <div class="day-header-controls">
+                                    <div class="task-count ${dayTasks.length > 0 ? 'has-tasks' : ''}">${dayTasks.length}</div>
+                                    <button class="collapse-toggle" title="Collapse section" onclick="event.stopPropagation(); app.toggleDayCollapse('${day}')">▼</button>
+                                </div>
+                            </div>
+                            
+                            <div class="day-content">
+                                <div class="add-task-section">
+                                    <div class="add-task-input">
+                                        <input type="text" id="newTask-${day}" placeholder="Add task...">
+                                        <button data-action="add-task" data-day="${day}">Add</button>
+                                    </div>
+                                </div>
+                                
+                                <div class="tasks-list" id="tasks-${day}">
+                                    <!-- Tasks will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                
+                // Bind enter key events for all inputs
+                this.days.forEach(day => {
+                    const input = document.getElementById(`newTask-${day}`);
+                    if (input) {
+                        input.addEventListener('keypress', (e) => {
+                            if (e.key === 'Enter') this.addTask(day);
+                        });
+                    }
+                });
+                
+                this.setupDragAndDrop();
+                this.attachTaskEventListeners(); // Add event listeners for buttons
+                this.log('Days rendered with collapse/expand functionality');
+            }
+
+            setupDragAndDrop() {
+                // Make task items draggable
+                document.addEventListener('dragstart', (e) => {
+                    if (e.target.classList.contains('task-item')) {
+                        e.target.classList.add('dragging');
+                        e.dataTransfer.setData('text/plain', e.target.dataset.taskId);
+                        e.dataTransfer.setData('source-day', e.target.closest('.day-column').dataset.day);
+                    }
+                });
+
+                document.addEventListener('dragend', (e) => {
+                    if (e.target.classList.contains('task-item')) {
+                        e.target.classList.remove('dragging');
+                    }
+                });
+
+                // Handle drag over day columns
+                document.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    const dayColumn = e.target.closest('.day-column');
+                    if (dayColumn) {
+                        dayColumn.classList.add('drag-over');
+                        
+                        // Auto-expand collapsed sections when dragging over them
+                        const day = dayColumn.dataset.day;
+                        if (this.isDayCollapsed(day)) {
+                            setTimeout(() => {
+                                if (dayColumn.classList.contains('drag-over')) {
+                                    this.expandDay(day);
+                                }
+                            }, 1000); // Expand after 1 second of hovering
+                        }
+                    }
+                });
+
+                document.addEventListener('dragleave', (e) => {
+                    const dayColumn = e.target.closest('.day-column');
+                    if (dayColumn && !dayColumn.contains(e.relatedTarget)) {
+                        dayColumn.classList.remove('drag-over');
+                    }
+                });
+
+                // Handle drop
+                document.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const dayColumn = e.target.closest('.day-column');
+                    if (dayColumn) {
+                        dayColumn.classList.remove('drag-over');
+                        const taskId = e.dataTransfer.getData('text/plain');
+                        const sourceDay = e.dataTransfer.getData('source-day');
+                        const targetDay = dayColumn.dataset.day;
+                        
+                        if (sourceDay !== targetDay) {
+                            this.expandDay(targetDay); // Ensure target day is expanded
+                            this.moveTask(taskId, sourceDay, targetDay);
+                        }
+                    }
+                });
+            }
+
+            moveTask(taskId, sourceDay, targetDay) {
+                const weekKey = this.getWeekKey();
+                if (!this.tasks[weekKey]) return;
+
+                const sourceTasks = this.tasks[weekKey][sourceDay] || [];
+                const taskIndex = sourceTasks.findIndex(task => task.id === taskId);
+                
+                if (taskIndex === -1) return;
+
+                const task = sourceTasks.splice(taskIndex, 1)[0];
+                
+                if (!this.tasks[weekKey][targetDay]) {
+                    this.tasks[weekKey][targetDay] = [];
+                }
+                
+                this.tasks[weekKey][targetDay].push(task);
+                
+                this.saveTasks();
+                this.renderAllTasks();
+                this.updateAllTaskCounts();
+                
+                // Update collapsed states after task counts change
+                this.applyCollapsedStates();
+                
+                this.log(`Task moved from ${sourceDay} to ${targetDay}`, { taskId, task: task.title });
+            }
+
+            getTasksForDay(day) {
+                const weekKey = this.getWeekKey();
+                return this.tasks[weekKey]?.[day] || [];
+            }
+
+            addTask(day) {
+                // Exit copy mode when adding tasks
+                if (this.copyMode) {
+                    this.exitCopyMode();
+                }
+                
+                const input = document.getElementById(`newTask-${day}`);
+                const title = input.value.trim();
+                
+                if (!title) {
+                    this.log(`Empty task title for ${day}, not adding`);
+                    return;
+                }
+                
+                // Auto-expand the day when adding a task
+                this.expandDay(day);
+                
+                const weekKey = this.getWeekKey();
+                if (!this.tasks[weekKey]) {
+                    this.tasks[weekKey] = {};
+                    this.days.forEach(d => this.tasks[weekKey][d] = []);
+                }
+                
+                if (!this.tasks[weekKey][day]) {
+                    this.tasks[weekKey][day] = [];
+                }
+                
+                const task = {
+                    id: Date.now().toString(),
+                    title,
+                    notes: '',
+                    progress: 0,
+                    completed: false,
+                    createdAt: new Date().toISOString()
+                };
+                
+                this.tasks[weekKey][day].push(task);
+                this.saveTasks();
+                this.renderTasksForDay(day);
+                this.updateTaskCount(day);
+                
+                input.value = '';
+                this.log(`Task added to ${day}`, task);
+            }
+
+            deleteTask(day, taskId) {
+                this.log(`Attempting to delete task ${taskId} from ${day}`);
+                
+                const weekKey = this.getWeekKey();
+                this.log(`Week key: ${weekKey}`);
+                
+                if (!this.tasks[weekKey]) {
+                    this.log(`No tasks found for week ${weekKey}`);
+                    return;
+                }
+                
+                if (!this.tasks[weekKey][day]) {
+                    this.log(`No tasks found for ${day} in week ${weekKey}`);
+                    return;
+                }
+                
+                const beforeCount = this.tasks[weekKey][day].length;
+                this.log(`Tasks before deletion: ${beforeCount}`);
+                
+                this.tasks[weekKey][day] = this.tasks[weekKey][day].filter(task => task.id !== taskId);
+                
+                const afterCount = this.tasks[weekKey][day].length;
+                this.log(`Tasks after deletion: ${afterCount}`);
+                
+                if (beforeCount === afterCount) {
+                    this.log(`Warning: No task was deleted. Task ID ${taskId} not found.`);
+                    alert(`Task not found. Please refresh the page.`);
+                    return;
+                }
+                
+                this.saveTasks();
+                this.renderTasksForDay(day);
+                this.updateTaskCount(day);
+                
+                // Re-apply collapsed state in case section should auto-collapse
+                setTimeout(() => this.applyCollapsedState(day), 100);
+                
+                this.log(`Task successfully deleted from ${day}: ${taskId}`);
+            }
+
+            updateTask(day, taskId, updates) {
+                const weekKey = this.getWeekKey();
+                if (!this.tasks[weekKey] || !this.tasks[weekKey][day]) return;
+                
+                const task = this.tasks[weekKey][day].find(t => t.id === taskId);
+                if (task) {
+                    Object.assign(task, updates);
+                    this.saveTasks();
+                    this.renderTasksForDay(day);
+                    this.log(`Task updated in ${day}: ${taskId}`, updates);
+                }
+            }
+
+            toggleComplete(day, taskId) {
+                const weekKey = this.getWeekKey();
+                const task = this.tasks[weekKey]?.[day]?.find(t => t.id === taskId);
+                if (task) {
+                    task.completed = !task.completed;
+                    task.progress = task.completed ? 100 : task.progress;
+                    this.saveTasks();
+                    this.renderTasksForDay(day);
+                    this.log(`Task toggled in ${day}: ${taskId}, completed: ${task.completed}`);
+                }
+            }
+
+            updateProgress(day, taskId, progress) {
+                const weekKey = this.getWeekKey();
+                const task = this.tasks[weekKey]?.[day]?.find(t => t.id === taskId);
+                if (task) {
+                    task.progress = Math.max(0, Math.min(100, parseInt(progress) || 0));
+                    task.completed = task.progress === 100;
+                    this.saveTasks();
+                    this.renderTasksForDay(day);
+                    this.log(`Progress updated in ${day}: ${taskId}, progress: ${task.progress}%`);
+                }
+            }
+
+            editTask(day, taskId, newTitle, newNotes) {
+                this.updateTask(day, taskId, {
+                    title: newTitle.trim(),
+                    notes: newNotes.trim()
+                });
+            }
+
+            updateTaskCount(day) {
+                const tasks = this.getTasksForDay(day);
+                const countEl = document.querySelector(`.day-${day} .task-count`);
+                if (countEl) {
+                    countEl.textContent = tasks.length;
+                    countEl.classList.toggle('has-tasks', tasks.length > 0);
+                }
+            }
+
+            updateAllTaskCounts() {
+                this.days.forEach(day => this.updateTaskCount(day));
+            }
+
+            saveTasks() {
+                const userKey = currentUser ? currentUser.uid : 'anonymous';
+                try {
+                    localStorage.setItem(`todoer-tasks-daily-${userKey}`, JSON.stringify(this.tasks));
+                    this.log('Daily tasks saved to localStorage');
+                } catch (e) {
+                    this.log('Error saving tasks', e);
+                    alert('Failed to save tasks. Storage might be full.');
+                }
+            }
+
+            renderAllTasks() {
+                this.days.forEach(day => {
+                    this.renderTasksForDayInternal(day);
+                    this.updateTaskCount(day);
+                });
+                // Attach event listeners once after all tasks are rendered
+                this.attachTaskEventListeners();
+            }
+
+            renderTasksForDay(day) {
+                this.renderTasksForDayInternal(day);
+                // Attach event listeners after rendering individual day
+                this.attachTaskEventListeners();
+            }
+
+            renderTasksForDayInternal(day) {
+                const tasks = this.getTasksForDay(day);
+                const container = document.getElementById(`tasks-${day}`);
+                
+                if (!container) return;
+                
+                if (tasks.length === 0) {
+                    container.innerHTML = '<div class="empty-day">No tasks</div>';
+                    return;
+                }
+                
+                container.innerHTML = tasks.map(task => `
+                    <div class="task-item" data-task-id="${task.id}" data-day="${day}" draggable="true">
+                        <div class="task-title ${task.completed ? 'completed' : ''}">${this.escapeHtml(task.title)}</div>
+                        ${task.notes ? `<div class="task-notes">${this.escapeHtml(task.notes)}</div>` : ''}
+                        
+                        <div class="progress-container">
+                            <div class="progress-label">${task.progress}%</div>
+                            <div class="progress-bar">
+                                <div class="progress-fill ${task.completed ? 'completed' : ''}" 
+                                     style="width: ${task.progress}%"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="task-controls">
+                            <input type="number" class="progress-input" min="0" max="100" 
+                                   value="${task.progress}" placeholder="%" data-task-id="${task.id}" data-day="${day}">
+                            <button class="btn btn-sm btn-progress" data-action="update-progress" data-task-id="${task.id}" data-day="${day}">Set</button>
+                            <button class="btn btn-sm ${task.completed ? 'btn-incomplete' : 'btn-complete'}" 
+                                    data-action="toggle-complete" data-task-id="${task.id}" data-day="${day}">
+                                ${task.completed ? '↶' : '✓'}
+                            </button>
+                            <button class="btn btn-sm btn-copy" data-action="copy" data-task-id="${task.id}" data-day="${day}">⧉</button>
+                            <button class="btn btn-sm btn-edit" data-action="edit" data-task-id="${task.id}" data-day="${day}">✎</button>
+                            <button class="btn btn-sm btn-delete" data-action="delete" data-task-id="${task.id}" data-day="${day}">✗</button>
+                        </div>
+                        
+                        <div class="edit-form" id="edit-${day}-${task.id}">
+                            <input type="text" class="edit-title" value="${this.escapeHtml(task.title)}" placeholder="Task title">
+                            <textarea class="edit-notes" placeholder="Add notes...">${this.escapeHtml(task.notes)}</textarea>
+                            <div class="task-controls">
+                                <button class="btn btn-save" data-action="save-edit" data-task-id="${task.id}" data-day="${day}">Save</button>
+                                <button class="btn btn-cancel" data-action="cancel-edit" data-task-id="${task.id}" data-day="${day}">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+                
+                this.log(`Rendered ${tasks.length} tasks for ${day}`);
+            }
+
+            attachTaskEventListeners() {
+                // Remove existing listeners to prevent duplicates
+                const existingListener = this.taskEventListener;
+                if (existingListener) {
+                    document.removeEventListener('click', existingListener);
+                }
+                
+                // Create new event listener
+                this.taskEventListener = (e) => {
+                    const button = e.target.closest('button[data-action]');
+                    if (!button) return;
+                    
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    const action = button.dataset.action;
+                    const taskId = button.dataset.taskId;
+                    const day = button.dataset.day;
+                    
+                    this.log(`Button clicked: ${action} for task ${taskId} on ${day}`);
+                    
+                    switch (action) {
+                        case 'add-task':
+                            this.addTask(day);
+                            break;
+                        case 'copy':
+                            this.startCopyMode(day, taskId);
+                            break;
+                        case 'delete':
+                            this.confirmDelete(day, taskId);
+                            break;
+                        case 'toggle-complete':
+                            this.toggleComplete(day, taskId);
+                            break;
+                        case 'edit':
+                            this.showEditForm(day, taskId);
+                            break;
+                        case 'save-edit':
+                            this.saveEdit(day, taskId);
+                            break;
+                        case 'cancel-edit':
+                            this.cancelEdit(day, taskId);
+                            break;
+                        case 'update-progress':
+                            const progressInput = button.parentElement.querySelector('.progress-input');
+                            if (progressInput) {
+                                this.updateProgress(day, taskId, progressInput.value);
+                            }
+                            break;
+                        default:
+                            this.log(`Unknown action: ${action}`);
+                    }
+                };
+                
+                // Attach the event listener
+                document.addEventListener('click', this.taskEventListener);
+                
+                // Add day column click handler for copy mode
+                this.dayClickListener = (e) => {
+                    if (this.copyMode && e.target.closest('.day-column')) {
+                        const dayColumn = e.target.closest('.day-column');
+                        const targetDay = dayColumn.dataset.day;
+                        
+                        // Don't allow copying to the same day
+                        if (targetDay === this.copyMode.day) {
+                            this.log(`Cannot copy to same day: ${targetDay}`);
+                            return;
+                        }
+                        
+                        // Perform the copy
+                        this.copyTaskToDay(targetDay);
+                        e.stopPropagation();
+                    }
+                };
+                
+                document.addEventListener('click', this.dayClickListener);
+                this.log('Task event listeners attached');
+            }
+
+            startCopyMode(day, taskId) {
+                this.log(`Starting copy mode for task ${taskId} from ${day}`);
+                
+                const weekKey = this.getWeekKey();
+                const task = this.tasks[weekKey]?.[day]?.find(t => t.id === taskId);
+                
+                if (!task) {
+                    this.log(`Task not found: ${taskId} in ${day}`);
+                    return;
+                }
+                
+                // Set copy mode state
+                this.copyMode = {
+                    taskId: taskId,
+                    day: day,
+                    taskData: { ...task } // Deep copy of task data
+                };
+                
+                // Update UI for copy mode
+                document.body.classList.add('copy-mode');
+                
+                // Highlight the copy button
+                const copyButton = document.querySelector(`button[data-action="copy"][data-task-id="${taskId}"]`);
+                if (copyButton) {
+                    copyButton.classList.add('copying');
+                    copyButton.textContent = '↻';
+                }
+                
+                // Mark source day
+                const sourceColumn = document.querySelector(`.day-${day}`);
+                if (sourceColumn) {
+                    sourceColumn.classList.add('copy-source');
+                }
+                
+                // Add escape key handler
+                this.copyModeEscapeHandler = (e) => {
+                    if (e.key === 'Escape') {
+                        this.exitCopyMode();
+                    }
+                };
+                document.addEventListener('keydown', this.copyModeEscapeHandler);
+                
+                this.log(`Copy mode active. Task data:`, this.copyMode.taskData);
+            }
+
+            copyTaskToDay(targetDay) {
+                this.log(`Copying task to ${targetDay}`);
+                
+                if (!this.copyMode) {
+                    this.log(`Error: Not in copy mode`);
+                    return;
+                }
+                
+                const weekKey = this.getWeekKey();
+                if (!this.tasks[weekKey]) {
+                    this.tasks[weekKey] = {};
+                    this.days.forEach(d => this.tasks[weekKey][d] = []);
+                }
+                
+                if (!this.tasks[weekKey][targetDay]) {
+                    this.tasks[weekKey][targetDay] = [];
+                }
+                
+                // Create new task with copied data
+                const copiedTask = {
+                    ...this.copyMode.taskData,
+                    id: Date.now().toString(), // New unique ID
+                    createdAt: new Date().toISOString() // Update creation time
+                };
+                
+                this.tasks[weekKey][targetDay].push(copiedTask);
+                
+                // Auto-expand target day
+                this.expandDay(targetDay);
+                
+                // Save and update UI
+                this.saveTasks();
+                this.renderTasksForDay(targetDay);
+                this.updateTaskCount(targetDay);
+                
+                this.log(`Task copied successfully from ${this.copyMode.day} to ${targetDay}`, copiedTask);
+                
+                // Exit copy mode
+                this.exitCopyMode();
+            }
+
+            exitCopyMode() {
+                this.log(`Exiting copy mode`);
+                
+                if (!this.copyMode) return;
+                
+                // Remove UI changes
+                document.body.classList.remove('copy-mode');
+                
+                // Reset copy button
+                const copyButton = document.querySelector(`button[data-action="copy"][data-task-id="${this.copyMode.taskId}"]`);
+                if (copyButton) {
+                    copyButton.classList.remove('copying');
+                    copyButton.textContent = '⧉';
+                }
+                
+                // Remove source day marking
+                const sourceColumn = document.querySelector(`.day-${this.copyMode.day}`);
+                if (sourceColumn) {
+                    sourceColumn.classList.remove('copy-source');
+                }
+                
+                // Remove escape handler
+                if (this.copyModeEscapeHandler) {
+                    document.removeEventListener('keydown', this.copyModeEscapeHandler);
+                    this.copyModeEscapeHandler = null;
+                }
+                
+                this.copyMode = null;
+                this.log(`Copy mode exited`);
+            }
+
+            confirmDelete(day, taskId) {
+                this.log(`Delete clicked for ${day} task: ${taskId}`);
+                
+                // Simple double-click delete - much cleaner UX
+                const button = document.querySelector(`button[data-action="delete"][data-task-id="${taskId}"]`);
+                if (!button) {
+                    this.log(`Button not found, direct delete`);
+                    this.deleteTask(day, taskId);
+                    return;
+                }
+                
+                // Check if this is already in "confirm mode"
+                if (button.classList.contains('delete-confirm')) {
+                    // Second click - delete the task
+                    this.log(`Confirmation click - deleting task`);
+                    this.deleteTask(day, taskId);
+                    return;
+                }
+                
+                // First click - enter confirm mode
+                this.log(`First click - entering confirm mode`);
+                button.classList.add('delete-confirm');
+                button.style.backgroundColor = '#ff4757';
+                button.textContent = '✓?';
+                button.title = 'Click again to confirm deletion';
+                
+                // Auto-reset after 3 seconds if no second click
+                setTimeout(() => {
+                    if (button.classList.contains('delete-confirm')) {
+                        button.classList.remove('delete-confirm');
+                        button.style.backgroundColor = '';
+                        button.textContent = '✗';
+                        button.title = '';
+                        this.log(`Delete confirmation timeout - reset button`);
+                    }
+                }, 3000);
+            }
+
+            showEditForm(day, taskId) {
+                document.getElementById(`edit-${day}-${taskId}`).style.display = 'block';
+                this.log(`Edit form shown for ${day} task: ${taskId}`);
+            }
+
+            cancelEdit(day, taskId) {
+                document.getElementById(`edit-${day}-${taskId}`).style.display = 'none';
+                this.log(`Edit cancelled for ${day} task: ${taskId}`);
+            }
+
+            saveEdit(day, taskId) {
+                const form = document.getElementById(`edit-${day}-${taskId}`);
+                const title = form.querySelector('.edit-title').value;
+                const notes = form.querySelector('.edit-notes').value;
+                
+                this.editTask(day, taskId, title, notes);
+                form.style.display = 'none';
+            }
+
+            escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+        }
+
+        // Initialize authentication when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded, Firebase Auth will handle initialization');
+        });
+    </script>
     </script>
 </body>
 </html>
